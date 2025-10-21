@@ -1,100 +1,89 @@
-console.log('JobWizard JS loaded');
-add jobs.js
-/* =========================================================
-   JobWizard — Jobs Page Logic
-   功能：
-   1) 取 Webhook 数据 → 渲染卡片（含 Posted at、地点/级别/类型/薪资 chips）
-   2) 左侧筛选：关键词、时间、级别、地点（可展开更多）
-   3) 分页：每页 20 个
-   4) Location 彻底清洗（自动加空格/逗号，去重复，去掉“US, US”）
-   ========================================================= */
+/* jobs.js — JobWizard job-post page script
+   - 解决：
+     1) “US, US” 这种位置项过滤掉
+     2) Location 自动加空格/逗号（SanJoseCA -> San Jose, CA）
+     3) 货币为空不报错
+     4) 分页可展示全部数据；默认 Date=All
+*/
 
 (() => {
-  // ⬇️ 改成你的 Make Webhook
+  // === 你的 Make Webhook ===
   const WEBHOOK = "https://hook.us2.make.com/57hb79ks3rp4hz4oi6fl2z7x3ip8ypj5";
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 20; // 每页 20 条；会自动根据数据量生成所有页码
 
-  // 列表 & 分页
+  // === DOM ===
   const $list = document.getElementById('job-list');
   const $pagi = document.getElementById('jobs-pagination');
 
-  // 筛选元素
+  // 左侧筛选
   const $kw = document.getElementById('kw');
   const $dateRadios = () => [...document.querySelectorAll('input[name="date"]')];
   const $levelChecks = () => [...document.querySelectorAll('.level-checkbox')];
   const $locGroup = document.getElementById('loc-group');
   const $locToggle = document.getElementById('loc-toggle');
 
-  // 状态
   const state = {
-    all: [],         // 全量数据
-    filtered: [],    // 筛选结果
+    all: [],
+    filtered: [],
     page: 1,
-    locShowAll: false,  // 地点展开/收起
-    locOptions: []      // 地点 facet [{name, count}]
+    locShowAll: false,
+    locOptions: [] // [{name, count}]
   };
 
-  /* ========== 工具函数 ========== */
-
-  // 相对时间 / 绝对日期
+  // === 工具 ===
   const relTime = iso => {
     if (!iso) return "";
     const d = new Date(iso);
     if (isNaN(d)) return iso;
-    const diff = (Date.now() - d.getTime())/1000;
-    if (diff < 60)   return "just now";
-    if (diff < 3600) return Math.floor(diff/60)   + "m ago";
-    if (diff < 86400) return Math.floor(diff/3600) + "h ago";
-    const days = Math.floor(diff/86400);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return "just now";
+    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+    if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+    const days = Math.floor(diff / 86400);
     if (days < 7) return days + "d ago";
     return d.toISOString().slice(0,10);
   };
 
-  // 货币
-  const money = (n, cur='USD') => {
+  // 货币兜底：没有币种时按普通数字格式化
+  const money = (n, cur) => {
     if (n == null || n === "") return "";
     const num = Number(n);
     if (Number.isNaN(num)) return String(n);
-    return new Intl.NumberFormat('en-US', { style:'currency', currency:cur, maximumFractionDigits:0 }).format(num);
+    try {
+      if (cur) {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(num);
+      }
+      // 无 currency 时走纯数字
+      return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(num);
+    } catch {
+      return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(num);
+    }
   };
 
-  // MID_SENIOR → Mid Senior
-  const toTitle = (str='') =>
-    str.toString().replace(/_/g,' ').toLowerCase().replace(/\b\w/g, s=>s.toUpperCase());
+  const toTitle = (str='') => str.toString().replace(/_/g,' ').toLowerCase().replace(/\b\w/g, s=>s.toUpperCase());
 
-  // 🔧 统一清洗地点：
-  //  - SanJose → San Jose；BangaloreKA/BostonMA → Bangalore, KA/Boston, MA
-  //  - 规范 US/USA；去重复词；去重复逗号；去尾逗号
-  //  - “US, US” 或仅 “US” → return ""（不参与 facet、不显示 chip）
+  // 清洗 Location：自动空格/逗号、去重复、去 “US, US”
   const cleanLocation = (s = "") => {
     let t = String(s || "").trim();
-
-    // SanJose → San Jose
+    // SanJose -> San Jose
     t = t.replace(/([a-z])([A-Z])/g, "$1 $2");
-
-    // BangaloreKA / BostonMA → Bangalore, KA / Boston, MA
+    // BangaloreKA / BostonMA -> Bangalore, KA / Boston, MA
     t = t.replace(/([A-Za-z])([A-Z]{2})(?=$|[^a-zA-Z])/g, "$1, $2");
-
-    // 统一 US
+    // USA -> US
     t = t.replace(/\bUSA?\b/gi, "US");
-
-    // 去重复词（California California）
-    t = t.replace(/\b([A-Za-z]+)\s*,?\s*\1\b/gi, "$1");
-
-    // 去重复逗号、空格与末尾逗号
-    t = t.replace(/\s*,\s*,/g, ", ")
+    // 去重复词、重复逗号和尾逗号
+    t = t.replace(/\b([A-Za-z]+)\s*,?\s*\1\b/gi, "$1")
+         .replace(/\s*,\s*,/g, ", ")
          .replace(/\s{2,}/g, " ")
          .replace(/\s*,\s*$/, "");
-
-    // “US” 或 “US, US” 直接过滤掉
+    // 只有 US 或 US, US 的不要
     if (/^US(,\s*US)?$/i.test(t)) return "";
-
     return t;
   };
 
   const chip = (emoji, text) => text ? `<span class="pill">${emoji} ${text}</span>` : "";
 
-  /* ========== 渲染卡片 ========== */
+  // === 卡片渲染 ===
   function renderCards(dataPage) {
     if (!dataPage.length) {
       $list.innerHTML = '<div class="error">No jobs for this page.</div>';
@@ -140,7 +129,7 @@ add jobs.js
     $list.innerHTML = html;
   }
 
-  /* ========== 分页 ========== */
+  // === 分页 ===
   function renderPagination() {
     const total = state.filtered.length;
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -149,6 +138,7 @@ add jobs.js
     const btn = (label, page, disabled=false, active=false) =>
       `<button class="page-btn ${active?'active':''}" ${disabled?'disabled':''} data-page="${page}">${label}</button>`;
 
+    // 最多显示 7 个页码，自动滑窗
     const maxBtns = 7;
     let start = Math.max(1, state.page - Math.floor(maxBtns/2));
     let end   = Math.min(totalPages, start + maxBtns - 1);
@@ -166,11 +156,12 @@ add jobs.js
     $pagi.querySelectorAll('.page-btn[data-page]').forEach(el => {
       el.onclick = () => {
         const target = Number(el.dataset.page);
-        const totalPages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
-        if (!Number.isNaN(target) && target >=1 && target <= totalPages) {
-          state.page = target;
-          draw();
-          window.scrollTo({ top: $list.offsetTop - 12, behavior:'smooth' });
+        if (!Number.isNaN(target)) {
+          const totalPages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
+          if (target >=1 && target <= totalPages) {
+            state.page = target; draw();
+            window.scrollTo({top: $list.offsetTop - 12, behavior:'smooth'});
+          }
         }
       };
     });
@@ -182,12 +173,12 @@ add jobs.js
     renderPagination();
   }
 
-  /* ========== 地点 facet ========== */
+  // === 位置 Facet ===
   function buildLocationFacet() {
     const counts = new Map();
     for (const j of state.all) {
       const loc = cleanLocation(j.Location || 'Remote');
-      if (!loc) continue; // 去掉空（含“US, US”/“US”）
+      if (!loc) continue;
       counts.set(loc, (counts.get(loc) || 0) + 1);
     }
     const arr = [...counts.entries()].map(([name, count]) => ({name, count}))
@@ -197,16 +188,14 @@ add jobs.js
   }
 
   function renderLocationFacet() {
-    const showMax = 12; // 默认显示 12 个
+    const showMax = 12;
     const list = state.locShowAll ? state.locOptions : state.locOptions.slice(0, showMax);
-
     $locGroup.innerHTML = list.map(opt => `
       <label class="loc-pill">
         <input type="checkbox" class="loc-checkbox" value="${opt.name}">
         <span>${opt.name}</span>
       </label>
     `).join('');
-
     $locToggle.style.display = state.locOptions.length > showMax ? 'inline-block' : 'none';
     $locToggle.textContent = state.locShowAll ? 'Show less' : 'Show more';
 
@@ -215,15 +204,13 @@ add jobs.js
     });
   }
 
-  /* ========== 过滤 ========== */
+  // === 过滤 ===
   function applyFilters() {
     const kw = $kw.value.trim().toLowerCase();
-    const dateVal = ($dateRadios().find(r=>r.checked)?.value) || 'all';
-
+    const dateVal = ($dateRadios().find(r=>r.checked)?.value) || 'all'; // 默认 all
     const levelSet = new Set($levelChecks().filter(c=>c.checked).map(c=>c.value));
     const locSet   = new Set([...document.querySelectorAll('.loc-checkbox:checked')].map(c=>c.value));
 
-    // 时间阈值（秒）
     let threshold = 0;
     if (dateVal === '6h') threshold = 6 * 3600;
     else if (dateVal === '24h') threshold = 24 * 3600;
@@ -231,14 +218,13 @@ add jobs.js
     else if (dateVal === '7d') threshold = 7 * 86400;
 
     const now = Date.now();
-
     const result = state.all.filter(j => {
-      // 关键词
+      // keyword
       if (kw) {
         const hay = (`${j.Title||''} ${j.CompanyName||''}`).toLowerCase();
         if (!hay.includes(kw)) return false;
       }
-      // 时间
+      // date
       if (threshold > 0 && j.PostedAt) {
         const d = new Date(j.PostedAt);
         if (!isNaN(d)) {
@@ -246,12 +232,12 @@ add jobs.js
           if (diff > threshold) return false;
         }
       }
-      // 级别
+      // level
       if (levelSet.size) {
         const lv = j.JobLevel ? toTitle(j.JobLevel) : '';
         if (!levelSet.has(lv)) return false;
       }
-      // 地点
+      // location
       if (locSet.size) {
         const loc = cleanLocation(j.Location || 'Remote');
         if (!locSet.has(loc)) return false;
@@ -264,35 +250,33 @@ add jobs.js
     draw();
   }
 
-  // Debounce，减少频繁筛选触发
-  const debounce = (fn, ms=300) => {
+  const debounce = (fn, ms=250) => {
     let t; return (...args)=>{ clearTimeout(t); t=setTimeout(()=>fn(...args), ms); };
   };
-  const onFilterChange = debounce(applyFilters, 100);
+  const onFilterChange = debounce(applyFilters, 120);
 
-  /* ========== 初始化 ========== */
+  // === Boot ===
   async function boot() {
     try {
-      // 拉取 Webhook 数据
       const res = await fetch(WEBHOOK, { method:'GET', cache:'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-
       const data = await res.json();
       const arr = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
       state.all = arr;
       state.filtered = [...state.all];
 
-      // 构建地点 facet
+      // 默认 Date=All（如果页面把 All 选中，就保持不动）
+      const allRadio = document.querySelector('input[name="date"][value="all"]');
+      if (allRadio) allRadio.checked = true;
+
       buildLocationFacet();
 
-      // 绑定事件
+      // 绑定交互
       $kw.addEventListener('input', onFilterChange);
       $dateRadios().forEach(r => r.addEventListener('change', onFilterChange));
       $levelChecks().forEach(c => c.addEventListener('change', onFilterChange));
       $locToggle.addEventListener('click', () => {
-        state.locShowAll = !state.locShowAll;
-        renderLocationFacet();
-        onFilterChange();
+        state.locShowAll = !state.locShowAll; renderLocationFacet(); onFilterChange();
       });
 
       draw();
