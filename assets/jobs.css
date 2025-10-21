@@ -1,19 +1,6 @@
-#job-list .job-card {
-  border-radius: 12px;
-  background: white;
-  padding: 16px;
-  margin-bottom: 12px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-/* =========================================================
-   JobWizard — Jobs Page Styles (左侧筛选 + 右侧列表)
-   说明：
-   1) 左侧筛选独立滚动：#jobs-filters 已设置 sticky + overflow
-   2) 灰色 tag 比原来更小一点（视觉更精致）
-   3) 其他样式保持你当前风格
-   ========================================================= */
+/* jobs.css — JobWizard job-post page styles */
 
-/* 版心 & 主布局 */
+/* 版心 & 布局 */
 .jobs-layout{
   max-width:1200px; margin:18px auto 80px; padding:0 16px;
   display:grid; grid-template-columns:280px 1fr; gap:24px;
@@ -23,23 +10,19 @@
 }
 
 /* 左侧筛选：吸顶 + 独立滚动 */
-#jobs-filters{
-  position: sticky;
-  top: 110px;                       /* 你的导航高度微调这个值 */
-  max-height: calc(100vh - 130px);  /* 留出底部一些空间 */
-  overflow: auto;                   /* 关键：独立滚动 */
-  padding-right: 6px;               /* 给滚动条留点内边距 */
+#jobs-filters, .filters{
+  position: sticky; top: 110px;
+  max-height: calc(100vh - 130px);
+  overflow: auto;
+  padding-right: 6px;
+}
+#jobs-filters::-webkit-scrollbar,
+.filters::-webkit-scrollbar{ width: 8px; }
+#jobs-filters::-webkit-scrollbar-thumb,
+.filters::-webkit-scrollbar-thumb{
+  background: rgba(17,24,39,.12); border-radius: 8px;
 }
 
-/* 可选：滚动条样式（更美观） */
-#jobs-filters::-webkit-scrollbar { width: 8px; }
-#jobs-filters::-webkit-scrollbar-thumb {
-  background: rgba(17,24,39,.12);
-  border-radius: 8px;
-}
-
-/* 筛选的卡片 */
-.filters{}
 .filter-card{
   background:#fff; border:1px solid rgba(17,24,39,.08); border-radius:16px;
   padding:14px 14px 10px; margin-bottom:14px; box-shadow:0 4px 10px rgba(17,24,39,.04);
@@ -65,13 +48,12 @@
   padding:6px 12px; background:#fff; cursor:pointer;
 }
 .loc-pill input{ accent-color:#6D5DFE; }
-
 .facet-toggle{
   margin-top:8px; background:#f8f8ff; color:#6D5DFE; border:1px solid rgba(109,93,254,.25);
   padding:6px 10px; border-radius:8px; cursor:pointer;
 }
 
-/* 列表与卡片（与你当前版一致） */
+/* 列表 & 卡片 */
 .job-list{ display:grid; grid-template-columns:1fr; gap:18px; }
 .job-card{
   background:#fff; border-radius:18px; padding:22px; box-shadow:0 10px 28px rgba(67,56,202,.06);
@@ -86,19 +68,17 @@
 .posted-pill{ background:#eef4ff; color:#374151; padding:4px 10px; border-radius:10px; line-height:1; }
 .job-title{ font-size:20px; font-weight:600; color:#111827; margin:6px 0 10px; text-align:left; justify-self:start; }
 
-/* 🔽 灰色 tag“再小一点点” */
+/* 灰色 tag 再小一点点（比之前小一丢丢） */
 .chip-row{ display:flex; gap:10px; flex-wrap:wrap; }
-/* 从 10x14 → 8x12；半径 14 → 12；字号 15 → 14 */
 .pill{
   display:inline-flex; align-items:center; gap:6px;
   background:#f3f4f6; color:#111827;
-  padding:8px 12px;
-  border-radius:12px;
-  font-size:14px;
-  line-height:1.2;
+  padding:8px 12px; border-radius:12px;
+  font-size:14px; line-height:1.2;
   border:1px solid rgba(17,24,39,.05);
 }
 
+/* Apply 更扁、更圆 */
 .apply-btn{
   background:linear-gradient(135deg,#6D5DFE,#7A63FF); color:#fff; font-weight:600;
   padding:10px 22px; border-radius:26px; text-decoration:none; white-space:nowrap;
